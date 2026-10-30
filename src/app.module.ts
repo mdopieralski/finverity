@@ -18,6 +18,7 @@ export interface AppOverrides {
   fxRateProvider?: FxRateProvider;
 }
 
+/** Ends the pool after the Kafka consumer has stopped (it disconnects in beforeApplicationShutdown). */
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Db) {}
 
