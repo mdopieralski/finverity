@@ -12,17 +12,23 @@ export class TokenVerifier {
     this.jwt = new JwtService({ secret: config.jwtSecret });
   }
 
-  /** The token's `sub`, or null for anything invalid (bad signature, expired, wrong iss/aud, no sub). */
+  /**
+   * The token's `sub`, or null for anything invalid: bad signature, expired, wrong iss/aud, no sub, or no
+   * `exp`. jsonwebtoken accepts a token without `exp` forever, so its presence is checked here.
+   */
   async subjectOf(token: string | undefined): Promise<string | null> {
     if (!token) {
       return null;
     }
     try {
-      const claims = await this.jwt.verifyAsync<{ sub?: unknown }>(token, {
+      const claims = await this.jwt.verifyAsync<{ sub?: unknown; exp?: unknown }>(token, {
         algorithms: ['HS256'],
         ...(this.config.jwtIssuer ? { issuer: this.config.jwtIssuer } : {}),
         ...(this.config.jwtAudience ? { audience: this.config.jwtAudience } : {}),
       });
+      if (typeof claims.exp !== 'number') {
+        return null;
+      }
       return typeof claims.sub === 'string' && claims.sub.length > 0 && claims.sub.length <= 200
         ? claims.sub
         : null;
