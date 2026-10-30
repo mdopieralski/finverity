@@ -4,7 +4,7 @@ name: program-capacity
 
 services:
   postgres:
-    image: postgres:17.10-alpine
+    image: postgres:18.4-alpine
     environment:
       POSTGRES_USER: capacity
       POSTGRES_PASSWORD: capacity
