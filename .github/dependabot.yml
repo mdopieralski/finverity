@@ -1,0 +1,58 @@
+version: 2
+
+# Weekly, grouped into one PR per ecosystem, and only for releases at least a week old, so a
+# compromised or broken release has time to be pulled first.
+updates:
+  - package-ecosystem: npm # also reads pnpm-lock.yaml
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    ignore:
+      # typescript-eslint and Nest 12 tooling support TypeScript below 7 (the Nest 12 template pins ^6 too).
+      - dependency-name: typescript
+        versions: ['>=7.0.0']
+      # @types/node follows the Node major in .nvmrc (22), not the latest Node.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directories: [/, /.github/actions/*]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker # Dockerfile base image
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: docker-compose # Postgres and Redpanda images
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
