@@ -129,8 +129,8 @@ cannot drift from code. Pattern taken from the ingrid repo, adapted. (`api-docs`
 
 - **Node 22, TypeScript strict, NestJS, PostgreSQL, Kafka.** pnpm 10 (pinned in `packageManager`).
 - **As built (2026-10-28):** NestJS 12 (ESM-only, so `"type": "module"`), TypeScript 6.0, Vitest 4 (Nest 12's
-  ESM default), `pg` + SQL migrations, kafkajs 2.2.4, Redpanda v26.1, Postgres 17. Rationale:
-  `docs/decisions/stack-2026-10-28.md`.
+  ESM default), `pg` + SQL migrations, kafkajs 2.2.4, Redpanda v26.1, Postgres 18 (from 17, 2026-10-30).
+  Rationale: `docs/decisions/stack-2026-10-28.md`.
 - NestJS because the role lists it as a must-have; this is the place to show it. If it starts costing more
   than half a day of framework friction, fall back to Fastify and say so in the README.
 - **Redpanda instead of full Kafka in `docker compose`** — Kafka-protocol compatible, one service instead of

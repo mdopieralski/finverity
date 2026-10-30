@@ -28,7 +28,7 @@ repayment.**
 
 One line on what it guarantees: never oversubscribed, safe to retry, treasury snapshots can't roll it back.
 
-[![CI](…/actions/workflows/ci.yml/badge.svg)](…) ![Node 22] ![TypeScript strict] ![NestJS 11] ![PostgreSQL 17]
+[![CI](…/actions/workflows/ci.yml/badge.svg)](…) ![Node 22] ![TypeScript strict] ![NestJS 11] ![PostgreSQL 18]
 ![OpenAPI 3.x]
 
 [Quick start](#quick-start) · [API](#api) · [How it works](#how-it-works) ·
