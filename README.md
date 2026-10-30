@@ -11,7 +11,7 @@ erase what it reserved.
 ![Node 22](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![NestJS 12](https://img.shields.io/badge/NestJS-12-E0234E?logo=nestjs&logoColor=white)
-![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
+![PostgreSQL 18](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
 ![Kafka API (Redpanda)](https://img.shields.io/badge/Kafka%20API-Redpanda-231F20?logo=apachekafka&logoColor=white)
 ![OpenAPI](https://img.shields.io/badge/OpenAPI-3.0-6BA539?logo=openapiinitiative&logoColor=white)
 
@@ -153,7 +153,8 @@ message per line (format in [How it works](#treasury-messages)).
 _Authorize_ is pre-set for _Try it out_ (paste the same token there once).
 
 **Run the whole reviewer walk-through automatically:** `bash scripts/ci-smoke.sh` (what CI runs). **Something
-stuck?** `docker compose down -v && docker compose up --build`.
+stuck?** `docker compose down -v && docker compose up --build`. (A volume left by the earlier Postgres 17
+stack needs that once: 18 does not read 17's data directory.)
 
 ---
 
@@ -423,7 +424,7 @@ condition in the code turns 5 tests red.
 |               |                                                                                                                                                                     |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Runtime**   | [Node.js 22](https://nodejs.org/docs/latest-v22.x/api/), [NestJS 12](https://docs.nestjs.com/) on Express 5, ES modules                                             |
-| **Data**      | [PostgreSQL 17](https://www.postgresql.org/docs/17/) via [`pg`](https://node-postgres.com/), SQL migration files                                                    |
+| **Data**      | [PostgreSQL 18](https://www.postgresql.org/docs/18/) via [`pg`](https://node-postgres.com/), SQL migration files                                                    |
 | **Messaging** | [Redpanda](https://docs.redpanda.com/) (Kafka API) via [kafkajs](https://kafka.js.org/)                                                                             |
 | **API docs**  | [`@nestjs/swagger`](https://docs.nestjs.com/openapi/introduction), [Swagger UI](https://swagger.io/tools/swagger-ui/), [Redocly CLI](https://redocly.com/docs/cli/) |
 | **Tooling**   | [pnpm](https://pnpm.io/), [Portless](https://github.com/vercel-labs/portless), [GitHub Actions](https://docs.github.com/actions)                                    |

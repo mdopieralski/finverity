@@ -4,7 +4,7 @@ name: program-capacity
 
 services:
   postgres:
-    image: postgres:17.10-alpine
+    image: postgres:18.4-alpine
     environment:
       POSTGRES_USER: capacity
       POSTGRES_PASSWORD: capacity
@@ -12,7 +12,9 @@ services:
     ports:
       - '55432:5432' # host port 55432: avoids clashing with a locally installed Postgres
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # Postgres 18+ keeps its data in a versioned subdirectory of this mount (18/docker), so a
+      # future pg_upgrade can run in place.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U capacity -d capacity']
       interval: 2s
