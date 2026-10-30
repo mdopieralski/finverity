@@ -37,8 +37,11 @@ expect "/docs without credentials" "$(curl -s -o /dev/null -w '%{http_code}' $AP
 expect "/docs with the token as password" "$(curl -s -o /dev/null -w '%{http_code}' -u "reviewer:$TOKEN" $API/docs/)" 200
 
 msg="smoke-$RANDOM$RANDOM"
+# Adjustments take exactly the next sequence number (a gap is rejected): read the current one first.
+seq=$(curl -s "${auth[@]}" $API/programs/prg_usd_globex/availability | sed -E 's/.*"treasurySequence":"([0-9]+)".*/\1/')
+[[ "$seq" =~ ^[0-9]+$ ]] || fail "could not read treasurySequence"
 printf '{"messageId":"%s","type":"ADJUSTMENT","programId":"prg_usd_globex","treasurySequence":"%s","currency":"USD","component":"UTILISED","deltaMinor":"1"}\n' \
-  "$msg" "$(date +%s)" | docker compose exec -T redpanda rpk topic produce treasury.capacity.v1 -k prg_usd_globex >/dev/null
+  "$msg" "$((seq + 1))" | docker compose exec -T redpanda rpk topic produce treasury.capacity.v1 -k prg_usd_globex >/dev/null
 for _ in $(seq 1 30); do
   docker compose logs api --no-log-prefix | grep -q "\"messageId\":\"$msg\".*\"outcome\":\"applied\"" && break
   sleep 1

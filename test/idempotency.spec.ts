@@ -16,6 +16,35 @@ afterAll(() => t.close());
 const body = { invoiceRef: 'INV-2001', amountMinor: '250000', currency: 'EUR' };
 
 describe('HTTP: Idempotency-Key', () => {
+  it('one invoice cannot be reserved twice, even with different keys and in parallel', async () => {
+    const programId = await t.program('EUR', 10_000_000n);
+    const invoice = { invoiceRef: `INV-${randomUUID()}`, amountMinor: '100000', currency: 'EUR' };
+    const results = await Promise.all(Array.from({ length: 8 }, () => t.reserve(programId, invoice)));
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses).toEqual([201, 409, 409, 409, 409, 409, 409, 409]);
+    for (const r of results.filter((x) => x.status === 409)) {
+      expect(r.body.error.code).toBe('invoice_already_reserved');
+    }
+    const state = await dbState(t.db, programId);
+    expect(state.reserved).toBe(100_000n); // the refused ones gave their increment back
+
+    // Once released, the invoice can be reserved again (e.g. a re-approval after repayment).
+    const created = results.find((r) => r.status === 201)!;
+    expect((await t.call('POST', `/reservations/${created.body.id}/release`)).status).toBe(200);
+    expect((await t.reserve(programId, invoice)).status).toBe(201);
+  });
+
+  it('a refused duplicate invoice is stored under its key and replayed', async () => {
+    const programId = await t.program('EUR', 10_000_000n);
+    const invoice = { invoiceRef: `INV-${randomUUID()}`, amountMinor: '100000', currency: 'EUR' };
+    expect((await t.reserve(programId, invoice)).status).toBe(201);
+    const key = `approval-${randomUUID()}`;
+    const first = await t.reserve(programId, invoice, key);
+    const replay = await t.reserve(programId, invoice, key);
+    expect([first.status, replay.status]).toEqual([409, 409]);
+    expect(replay.headers.get('idempotent-replayed')).toBe('true');
+  });
+
   it('the same Idempotency-Key returns the original result', async () => {
     const programId = await t.program('EUR', 10_000_000n);
     const key = `approval-${randomUUID()}`;
@@ -87,8 +116,9 @@ describe('HTTP: Idempotency-Key', () => {
   it('keys are scoped to the token subject: two clients may use the same key', async () => {
     const programId = await t.program('EUR', 10_000_000n);
     const key = 'shared-key';
-    const a = await t.reserve(programId, body, key, t.token('client-a'));
-    const b = await t.reserve(programId, body, key, t.token('client-b'));
+    // Different invoices: one invoice has at most one ACTIVE reservation, whoever asks.
+    const a = await t.reserve(programId, { ...body, invoiceRef: 'INV-2001-A' }, key, t.token('client-a'));
+    const b = await t.reserve(programId, { ...body, invoiceRef: 'INV-2001-B' }, key, t.token('client-b'));
     expect([a.status, b.status]).toEqual([201, 201]);
     expect(a.body.id).not.toBe(b.body.id);
   });

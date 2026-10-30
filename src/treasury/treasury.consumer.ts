@@ -1,4 +1,9 @@
-import { Inject, Injectable, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
+import {
+  type BeforeApplicationShutdown,
+  Inject,
+  Injectable,
+  type OnApplicationBootstrap,
+} from '@nestjs/common';
 import { type Consumer, Kafka, logLevel } from 'kafkajs';
 
 import { CONFIG, type Config } from '../config/config.js';
@@ -11,7 +16,7 @@ import { TreasuryHandler } from './treasury.handler.js';
  * kafkajs retries the message after a back-off.
  */
 @Injectable()
-export class TreasuryConsumer implements OnApplicationBootstrap, OnApplicationShutdown {
+export class TreasuryConsumer implements OnApplicationBootstrap, BeforeApplicationShutdown {
   private consumer: Consumer | undefined;
 
   constructor(
@@ -57,8 +62,12 @@ export class TreasuryConsumer implements OnApplicationBootstrap, OnApplicationSh
     });
   }
 
-  async onApplicationShutdown(): Promise<void> {
-    // disconnect() lets the in-flight eachMessage (and its offset commit) finish first.
+  /**
+   * Before, not on, application shutdown: Nest runs every onApplicationShutdown hook concurrently, and the
+   * pool closes in one of them. disconnect() lets the in-flight eachMessage (its transaction and offset
+   * commit) finish, so it must complete while the pool is still open.
+   */
+  async beforeApplicationShutdown(): Promise<void> {
     await this.consumer?.disconnect();
   }
 }

@@ -116,12 +116,45 @@ describe('availability from the ledger', () => {
     });
   });
 
-  it('the database refuses UPDATE and DELETE on ledger rows (append-only)', async () => {
+  it('the database refuses UPDATE, DELETE and TRUNCATE on ledger rows (append-only)', async () => {
     const programId = await t.program('EUR', 1_000n);
     const mutate = ['UPDATE', 'ledger_entries SET delta_minor = 0 WHERE program_id = $1'].join(' ');
     const remove = ['DELETE FROM', 'ledger_entries WHERE program_id = $1'].join(' ');
+    const wipe = ['TRUNCATE', 'ledger_entries CASCADE'].join(' ');
     await expect(t.db.query(mutate, [programId])).rejects.toThrow(/append-only/);
     await expect(t.db.query(remove, [programId])).rejects.toThrow(/append-only/);
+    await expect(t.db.query(wipe)).rejects.toThrow(/append-only/);
+    expect((await dbState(t.db, programId)).ledgerRows).toBeGreaterThan(0);
+  });
+
+  it('an asOf answer never changes later: it waits for a write in flight on the program', async () => {
+    const programId = await t.program('EUR', 1_000_000n);
+    // A writer holding the program row lock, as every ledger writer does, with a row written but not
+    // yet committed.
+    const writer = await t.db.connect();
+    try {
+      await writer.query('BEGIN');
+      await writer.query('SELECT 1 FROM programs WHERE id = $1 FOR UPDATE', [programId]);
+      await writer.query(
+        `INSERT INTO ledger_entries (program_id, kind, component, delta_minor, treasury_sequence, source)
+         VALUES ($1, 'TREASURY_ADJUSTMENT', 'TREASURY_UTILISED', 300000, 1, 'in-flight')`,
+        [programId]
+      );
+      const { rows } = await writer.query('SELECT clock_timestamp() AS now');
+      const asOf = new Date(rows[0].now.getTime() + 1);
+      await new Promise((r) => setTimeout(r, 5));
+
+      const first = at(programId, asOf); // must wait for the writer, not answer without its row
+      await new Promise((r) => setTimeout(r, 300));
+      await writer.query('COMMIT');
+
+      const answered = await first;
+      expect(answered.status).toBe(200);
+      expect(answered.body.treasuryUtilisedMinor).toBe('300000');
+      expect((await at(programId, asOf)).body).toEqual(answered.body);
+    } finally {
+      writer.release();
+    }
   });
 });
 
