@@ -1,0 +1,6 @@
+extends:
+  - recommended
+
+rules:
+  # A private take-home with no licence to point to (as in ingrid).
+  info-license: off

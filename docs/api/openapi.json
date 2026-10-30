@@ -1,0 +1,984 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/programs/{programId}/reservations": {
+      "post": {
+        "description": "Converts the invoice amount into the program currency **once, now** (rounded up), stores the amount,\nthe rate and its timestamp, and takes that much capacity. Never oversubscribes: the capacity check and\nthe write are one atomic statement.\n\n**Idempotent:** send a unique `Idempotency-Key` per invoice approval. A retry with the same key and the\nsame body returns the original response (`Idempotent-Replayed: true`), including a 422; the same key\nwith a different body is a 409.\n\n**One active reservation per invoice:** reserving an `invoiceRef` that already has an ACTIVE\nreservation on this program is a 409 (`invoice_already_reserved`), whatever the key.",
+        "operationId": "createReservation",
+        "parameters": [
+          {
+            "name": "programId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "pattern": "^prg_[a-z0-9_]{1,64}$",
+              "example": "prg_eur_acme"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Unique per reservation attempt, 1-255 printable ASCII characters. Scoped to the token subject.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255,
+              "example": "approval-INV-1001"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReserveRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reserved (or the replay of an earlier 201).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: The request is invalid.<br>`invalid_amount`: amountMinor must be a positive integer string in minor units.<br>`idempotency_key_required`: Idempotency-Key header is required (1-255 printable characters).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "invalid_request",
+                    "value": {
+                      "error": {
+                        "code": "invalid_request",
+                        "message": "The request is invalid.",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  },
+                  "invalid_amount": {
+                    "summary": "invalid_amount",
+                    "value": {
+                      "error": {
+                        "code": "invalid_amount",
+                        "message": "amountMinor must be a positive integer string in minor units.",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  },
+                  "idempotency_key_required": {
+                    "summary": "idempotency_key_required",
+                    "value": {
+                      "error": {
+                        "code": "idempotency_key_required",
+                        "message": "Idempotency-Key header is required (1-255 printable characters).",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "unauthenticated",
+                    "message": "Authentication required.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`program_not_found`: Program not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "program_not_found",
+                    "message": "Program not found.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`idempotency_key_reused`: Idempotency-Key was already used with a different request.<br>`invoice_already_reserved`: This invoice already has an active reservation on this program.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "examples": {
+                  "idempotency_key_reused": {
+                    "summary": "idempotency_key_reused",
+                    "value": {
+                      "error": {
+                        "code": "idempotency_key_reused",
+                        "message": "Idempotency-Key was already used with a different request.",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  },
+                  "invoice_already_reserved": {
+                    "summary": "invoice_already_reserved",
+                    "value": {
+                      "error": {
+                        "code": "invoice_already_reserved",
+                        "message": "This invoice already has an active reservation on this program.",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`insufficient_capacity`: Insufficient capacity on this program.<br>`fx_rate_unavailable`: No exchange rate is available for this currency pair.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "examples": {
+                  "insufficient_capacity": {
+                    "summary": "insufficient_capacity",
+                    "value": {
+                      "error": {
+                        "code": "insufficient_capacity",
+                        "message": "Insufficient capacity on this program.",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  },
+                  "fx_rate_unavailable": {
+                    "summary": "fx_rate_unavailable",
+                    "value": {
+                      "error": {
+                        "code": "fx_rate_unavailable",
+                        "message": "No exchange rate is available for this currency pair.",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal`: Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "internal",
+                    "message": "Internal error.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`service_unavailable`: Service temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "service_unavailable",
+                    "message": "Service temporarily unavailable.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reserve capacity for an invoice approved for early payment",
+        "tags": [
+          "Programs"
+        ]
+      },
+      "get": {
+        "description": "Keyset pagination: pass `nextCursor` back as `cursor`. Stable while new reservations arrive.",
+        "operationId": "listReservations",
+        "parameters": [
+          {
+            "name": "programId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "pattern": "^prg_[a-z0-9_]{1,64}$",
+              "example": "prg_eur_acme"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque, from `nextCursor`."
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "ACTIVE",
+                "RELEASED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationPageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "The request is invalid.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "unauthenticated",
+                    "message": "Authentication required.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`program_not_found`: Program not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "program_not_found",
+                    "message": "Program not found.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal`: Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "internal",
+                    "message": "Internal error.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`service_unavailable`: Service temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "service_unavailable",
+                    "message": "Service temporarily unavailable.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List a program’s reservations, newest first",
+        "tags": [
+          "Programs"
+        ]
+      }
+    },
+    "/programs/{programId}/availability": {
+      "get": {
+        "description": "Without `asOf`: the current figures. With `asOf`: recomputed from the append-only ledger up to that instant, as an auditor would.",
+        "operationId": "getAvailability",
+        "parameters": [
+          {
+            "name": "programId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "pattern": "^prg_[a-z0-9_]{1,64}$",
+              "example": "prg_eur_acme"
+            }
+          },
+          {
+            "name": "asOf",
+            "required": false,
+            "in": "query",
+            "description": "ISO-8601 instant with an offset, not in the future.",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-10-28T10:00:00Z"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "The request is invalid.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "unauthenticated",
+                    "message": "Authentication required.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`program_not_found`: Program not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "program_not_found",
+                    "message": "Program not found.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal`: Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "internal",
+                    "message": "Internal error.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`service_unavailable`: Service temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "service_unavailable",
+                    "message": "Service temporarily unavailable.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Current availability, or availability at a past instant",
+        "tags": [
+          "Programs"
+        ]
+      }
+    },
+    "/reservations/{reservationId}/release": {
+      "post": {
+        "description": "Gives back exactly the amount the reservation took, in the program currency: never reconverted at a new rate. Idempotent by state: releasing an already released reservation returns it unchanged.",
+        "operationId": "releaseReservation",
+        "parameters": [
+          {
+            "name": "reservationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Released (now, or earlier).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "The request is invalid.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "unauthenticated",
+                    "message": "Authentication required.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`reservation_not_found`: Reservation not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "reservation_not_found",
+                    "message": "Reservation not found.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal`: Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "internal",
+                    "message": "Internal error.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`service_unavailable`: Service temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBodyDto"
+                },
+                "example": {
+                  "error": {
+                    "code": "service_unavailable",
+                    "message": "Service temporarily unavailable.",
+                    "requestId": "b2c4…"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Release a reservation on repayment",
+        "tags": [
+          "Reservations"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Program capacity",
+    "description": "Tracks a supply chain finance program's credit capacity in real time: invoices approved for early payment\n**reserve** capacity, repayment **releases** it, and the funder's treasury system adjusts and reconciles the\nlimit over Kafka.\n\n### Authentication\nEvery operation needs `Authorization: Bearer <JWT>` (HS256, signed with the service's `JWT_SECRET`).\nLocally: `pnpm run token`. Use **Authorize** above; _Try it out_ then sends the token.\n\n### Money\nEvery amount is a **string of integer minor units** in the currency next to it: EUR 12,500.00 is `\"1250000\"`,\n¥500 is `\"500\"` (JPY has no minor unit). Fractions, numbers and exponents are rejected with 400.\nResponses carry `exponent` so a client can format them.\n\n### Currency conversion\nAn invoice in another currency is converted into the program currency **once, at reservation time**, rounded\nup, and the rate and its timestamp are stored on the reservation. A release gives back exactly the stored\namount; it is never reconverted.\n\n### Idempotency\n`POST /programs/{programId}/reservations` requires an `Idempotency-Key`. The same key with the same body\nreturns the original response (header `Idempotent-Replayed: true`); with a different body it is a 409.\nReleases are idempotent by state.\n\n### Errors\n`{ \"error\": { \"code\", \"message\", \"requestId\" } }`. Messages are fixed strings per code; internal detail is\nonly logged. Every response carries `X-Request-Id`.",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Programs",
+      "description": "Reserve capacity, read availability, list reservations."
+    },
+    {
+      "name": "Reservations",
+      "description": "Release a reservation on repayment."
+    }
+  ],
+  "servers": [
+    {
+      "url": "/",
+      "description": "This server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "jwt": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "ReserveRequestDto": {
+        "type": "object",
+        "properties": {
+          "invoiceRef": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,63}$",
+            "example": "INV-1001",
+            "description": "The supplier invoice approved for early payment (the funder's reference)."
+          },
+          "amountMinor": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,17}$",
+            "example": "1250000",
+            "description": "Invoice amount in integer minor units of `currency` (USD 12,500.00 = \"1250000\"; JPY has no minor unit)."
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "EUR",
+              "USD",
+              "GBP",
+              "PLN",
+              "CHF",
+              "JPY"
+            ],
+            "example": "USD",
+            "description": "Invoice currency. Converted once, now, into the program currency if they differ."
+          }
+        },
+        "required": [
+          "invoiceRef",
+          "amountMinor",
+          "currency"
+        ]
+      },
+      "InvoiceAmountDto": {
+        "type": "object",
+        "properties": {
+          "amountMinor": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,17}$",
+            "example": "1250000",
+            "description": "Invoice amount as submitted, in minor units of `currency`."
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "EUR",
+              "USD",
+              "GBP",
+              "PLN",
+              "CHF",
+              "JPY"
+            ],
+            "example": "USD",
+            "description": "Invoice currency."
+          }
+        },
+        "required": [
+          "amountMinor",
+          "currency"
+        ]
+      },
+      "FxDto": {
+        "type": "object",
+        "properties": {
+          "rate": {
+            "type": "string",
+            "example": "0.909091",
+            "description": "Program-currency units per one invoice-currency unit, as used. \"1\" when the currencies match."
+          },
+          "rateAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the rate was fixed."
+          },
+          "source": {
+            "type": "string",
+            "example": "fixed-table",
+            "description": "Where the rate came from."
+          }
+        },
+        "required": [
+          "rate",
+          "rateAt",
+          "source"
+        ]
+      },
+      "ReservationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "6f1c2a9e-3b0d-4c55-9a51-2f1f6a7c9d10"
+          },
+          "programId": {
+            "type": "string",
+            "example": "prg_eur_acme"
+          },
+          "invoiceRef": {
+            "type": "string",
+            "example": "INV-1001"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "RELEASED"
+            ],
+            "example": "ACTIVE"
+          },
+          "amountMinor": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,17}$",
+            "example": "1136364",
+            "description": "Capacity taken, in minor units of the PROGRAM currency, rounded up. Release gives back exactly this."
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "EUR",
+              "USD",
+              "GBP",
+              "PLN",
+              "CHF",
+              "JPY"
+            ],
+            "example": "EUR",
+            "description": "Program currency."
+          },
+          "exponent": {
+            "type": "integer",
+            "example": 2,
+            "description": "Minor-unit exponent of `currency` (2 for EUR, 0 for JPY)."
+          },
+          "invoice": {
+            "$ref": "#/components/schemas/InvoiceAmountDto"
+          },
+          "fx": {
+            "$ref": "#/components/schemas/FxDto"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "releasedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          }
+        },
+        "required": [
+          "id",
+          "programId",
+          "invoiceRef",
+          "status",
+          "amountMinor",
+          "currency",
+          "exponent",
+          "invoice",
+          "fx",
+          "createdAt",
+          "releasedAt"
+        ]
+      },
+      "ErrorDetailDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unauthenticated",
+              "invalid_request",
+              "invalid_amount",
+              "idempotency_key_required",
+              "program_not_found",
+              "reservation_not_found",
+              "route_not_found",
+              "idempotency_key_reused",
+              "invoice_already_reserved",
+              "insufficient_capacity",
+              "fx_rate_unavailable",
+              "service_unavailable",
+              "internal"
+            ],
+            "example": "insufficient_capacity"
+          },
+          "message": {
+            "type": "string",
+            "example": "Insufficient capacity on this program.",
+            "description": "A fixed string per code."
+          },
+          "requestId": {
+            "type": "string",
+            "example": "0b6d7f0e-4f2a-4a8e-9a3e-3c2a1d9b8e71",
+            "description": "Echoed in X-Request-Id and the logs."
+          },
+          "fields": {
+            "example": [
+              "amountMinor"
+            ],
+            "description": "Offending field names (never their values).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "requestId"
+        ]
+      },
+      "ErrorBodyDto": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetailDto"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "AvailabilityDto": {
+        "type": "object",
+        "properties": {
+          "programId": {
+            "type": "string",
+            "example": "prg_eur_acme"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "EUR",
+              "USD",
+              "GBP",
+              "PLN",
+              "CHF",
+              "JPY"
+            ],
+            "example": "EUR",
+            "description": "Program currency: every amount below is in it."
+          },
+          "exponent": {
+            "type": "integer",
+            "example": 2
+          },
+          "creditLimitMinor": {
+            "type": "string",
+            "pattern": "^-?[0-9]{1,19}$",
+            "example": "1000000000",
+            "description": "Credit limit set by treasury."
+          },
+          "treasuryUtilisedMinor": {
+            "type": "string",
+            "pattern": "^-?[0-9]{1,19}$",
+            "example": "0",
+            "description": "Utilisation treasury reports from outside this service."
+          },
+          "reservedMinor": {
+            "type": "string",
+            "pattern": "^-?[0-9]{1,19}$",
+            "example": "1136364",
+            "description": "Sum of ACTIVE reservations made through this service."
+          },
+          "availableMinor": {
+            "type": "string",
+            "pattern": "^-?[0-9]{1,19}$",
+            "example": "998863636",
+            "description": "creditLimit − treasuryUtilised − reserved. Negative if treasury cut the limit below utilisation."
+          },
+          "treasurySequence": {
+            "type": "string",
+            "example": "0",
+            "description": "Last treasury sequence applied."
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The instant this was computed for: null = now (current figures); set = folded from the ledger."
+          }
+        },
+        "required": [
+          "programId",
+          "currency",
+          "exponent",
+          "creditLimitMinor",
+          "treasuryUtilisedMinor",
+          "reservedMinor",
+          "availableMinor",
+          "treasurySequence",
+          "asOf"
+        ]
+      },
+      "ReservationPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReservationDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pass as `cursor` to get the next page; null on the last page."
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "jwt": []
+    }
+  ]
+}
