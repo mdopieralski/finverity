@@ -14,7 +14,7 @@ import type { Response } from 'express';
 import { CapacityService } from '../capacity/capacity.service.js';
 import { PG_POOL, type Db, withTransaction } from '../db/database.js';
 import { ApiErrors } from '../docs/api-errors.decorator.js';
-import { DomainError, type ErrorKind, isErrorKind } from '../errors/error-table.js';
+import { DomainError, ERROR_TABLE, type ErrorKind, isErrorKind } from '../errors/error-table.js';
 import { claimKey, findStored, requestHash, storeResult } from '../idempotency/idempotency.store.js';
 import { contextOf } from '../logging/request-context.js';
 import { AvailabilityDto, ReservationDto, ReservationPageDto, ReserveRequestDto } from './dto.js';
@@ -51,6 +51,9 @@ export class ProgramsController {
       '**Idempotent:** send a unique `Idempotency-Key` per invoice approval. A retry with the same key and the',
       'same body returns the original response (`Idempotent-Replayed: true`), including a 422; the same key',
       'with a different body is a 409.',
+      '',
+      '**One active reservation per invoice:** reserving an `invoiceRef` that already has an ACTIVE',
+      'reservation on this program is a 409 (`invoice_already_reserved`), whatever the key.',
     ].join('\n'),
   })
   @PROGRAM_ID_PARAM
@@ -73,6 +76,7 @@ export class ProgramsController {
     'idempotency_key_required',
     'program_not_found',
     'idempotency_key_reused',
+    'invoice_already_reserved',
     'insufficient_capacity',
     'fx_rate_unavailable'
   )
@@ -118,12 +122,12 @@ export class ProgramsController {
             return { kind: 'done', replayed: true, status: claim.status, body: claim.body };
           }
           const result = await this.capacity.reserve(tx, priced.priced, `http:${subject}:${key}`);
-          // Stored, including the 422: a key names one approval attempt, and its answer is final. A client
+          // Stored, including the 422 and 409: a key names one approval attempt, and its answer is final. A client
           // retrying after a timeout gets the answer that was given, not a different one minutes later; a new
           // approval attempt uses a new key.
           const stored = result.ok
             ? { status: 201, body: reservationView(result.reservation) }
-            : { status: 422, body: { error: { code: result.kind } } };
+            : { status: ERROR_TABLE[result.kind].status, body: { error: { code: result.kind } } };
           await storeResult(tx, subject, key, stored.status, stored.body);
           return { kind: 'done', replayed: false, ...stored };
         });

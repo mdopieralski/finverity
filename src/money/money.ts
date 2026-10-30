@@ -3,7 +3,14 @@
 
 /** Positive integer, no sign, no leading zeros, fits in Postgres BIGINT. */
 const MINOR_PATTERN = /^[1-9][0-9]{0,17}$/;
-const BIGINT_MAX = 9_223_372_036_854_775_807n;
+/** Postgres BIGINT's largest value: no stored amount can exceed it. */
+export const BIGINT_MAX = 9_223_372_036_854_775_807n;
+
+/**
+ * The largest credit limit or treasury utilisation a program can carry: half of BIGINT, so that
+ * `limit − utilised − reserved` (the availability the guard computes in SQL) can never overflow either.
+ */
+export const MAX_TREASURY_MINOR = BIGINT_MAX / 2n;
 
 export const MINOR_AMOUNT_PATTERN = MINOR_PATTERN.source;
 

@@ -105,6 +105,67 @@ describe('reconciliation snapshots', () => {
     });
   });
 
+  it('an adjustment that skips a sequence number is rejected, and a snapshot recovers', async () => {
+    const programId = await t.program('EUR', 1_000_000n);
+    const adj = (seq: number, delta: string) => ({
+      messageId: `tre-${randomUUID()}`,
+      type: 'ADJUSTMENT',
+      programId,
+      treasurySequence: String(seq),
+      currency: 'EUR',
+      component: 'UTILISED',
+      deltaMinor: delta,
+    });
+    expect(await deliver(t, adj(1, '100000'))).toBe('applied');
+    // 2 never arrives (or arrives later): 3 would apply on top of a state missing 2's delta.
+    expect(await deliver(t, adj(3, '50000'))).toBe('rejected');
+    const { rows } = await t.db.query(
+      `SELECT detail FROM processed_messages WHERE outcome = 'rejected' AND detail LIKE 'sequence gap%' AND detail LIKE '%got 3%'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(await availability(programId)).toMatchObject({
+      treasuryUtilisedMinor: '100000',
+      treasurySequence: '1',
+    });
+
+    // 2 arriving late still applies in order; a snapshot rebases whatever was missed.
+    expect(await deliver(t, adj(2, '20000'))).toBe('applied');
+    expect(await deliver(t, snapshot(programId, 5, 1_000_000n, 170_000n))).toBe('applied');
+    expect(await availability(programId)).toMatchObject({
+      treasuryUtilisedMinor: '170000',
+      treasurySequence: '5',
+    });
+    expect(await deliver(t, adj(6, '1'))).toBe('applied');
+  });
+
+  it('an adjustment beyond the supported range is rejected and acknowledged, never retried forever', async () => {
+    const programId = await t.program('EUR', 1_000_000n);
+    let seq = 0;
+    const big = () => ({
+      messageId: `tre-${randomUUID()}`,
+      type: 'ADJUSTMENT',
+      programId,
+      treasurySequence: String(++seq),
+      currency: 'EUR',
+      component: 'LIMIT',
+      deltaMinor: '999999999999999999',
+    });
+    // Each step is a valid 18-digit delta; together they would leave BIGINT. The handler must return an
+    // outcome (the offset is then committed) instead of throwing (which Kafka would redeliver forever).
+    const outcomes: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      outcomes.push(await deliver(t, big()));
+      if (outcomes.at(-1) === 'rejected') break;
+    }
+    expect(outcomes.at(-1)).toBe('rejected');
+    expect(outcomes.slice(0, -1).every((o) => o === 'applied')).toBe(true);
+    const { rows } = await t.db.query(
+      `SELECT detail FROM processed_messages WHERE detail = 'adjustment would exceed the largest supported amount'`
+    );
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect((await dbState(t.db, programId)).ledgerRows).toBeGreaterThan(0);
+  });
+
   it('a malformed message or one for another currency is recorded as rejected and acknowledged', async () => {
     const programId = await t.program('EUR', 1_000_000n);
     expect(await deliver(t, { messageId: `tre-${randomUUID()}`, type: 'SNAPSHOT', programId })).toBe(

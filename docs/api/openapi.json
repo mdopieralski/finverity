@@ -3,7 +3,7 @@
   "paths": {
     "/programs/{programId}/reservations": {
       "post": {
-        "description": "Converts the invoice amount into the program currency **once, now** (rounded up), stores the amount,\nthe rate and its timestamp, and takes that much capacity. Never oversubscribes: the capacity check and\nthe write are one atomic statement.\n\n**Idempotent:** send a unique `Idempotency-Key` per invoice approval. A retry with the same key and the\nsame body returns the original response (`Idempotent-Replayed: true`), including a 422; the same key\nwith a different body is a 409.",
+        "description": "Converts the invoice amount into the program currency **once, now** (rounded up), stores the amount,\nthe rate and its timestamp, and takes that much capacity. Never oversubscribes: the capacity check and\nthe write are one atomic statement.\n\n**Idempotent:** send a unique `Idempotency-Key` per invoice approval. A retry with the same key and the\nsame body returns the original response (`Idempotent-Replayed: true`), including a 422; the same key\nwith a different body is a 409.\n\n**One active reservation per invoice:** reserving an `invoiceRef` that already has an ACTIVE\nreservation on this program is a 409 (`invoice_already_reserved`), whatever the key.",
         "operationId": "createReservation",
         "parameters": [
           {
@@ -125,17 +125,32 @@
             }
           },
           "409": {
-            "description": "`idempotency_key_reused`: Idempotency-Key was already used with a different request.",
+            "description": "`idempotency_key_reused`: Idempotency-Key was already used with a different request.<br>`invoice_already_reserved`: This invoice already has an active reservation on this program.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBodyDto"
                 },
-                "example": {
-                  "error": {
-                    "code": "idempotency_key_reused",
-                    "message": "Idempotency-Key was already used with a different request.",
-                    "requestId": "b2c4…"
+                "examples": {
+                  "idempotency_key_reused": {
+                    "summary": "idempotency_key_reused",
+                    "value": {
+                      "error": {
+                        "code": "idempotency_key_reused",
+                        "message": "Idempotency-Key was already used with a different request.",
+                        "requestId": "b2c4…"
+                      }
+                    }
+                  },
+                  "invoice_already_reserved": {
+                    "summary": "invoice_already_reserved",
+                    "value": {
+                      "error": {
+                        "code": "invoice_already_reserved",
+                        "message": "This invoice already has an active reservation on this program.",
+                        "requestId": "b2c4…"
+                      }
+                    }
                   }
                 }
               }
@@ -822,6 +837,7 @@
               "reservation_not_found",
               "route_not_found",
               "idempotency_key_reused",
+              "invoice_already_reserved",
               "insufficient_capacity",
               "fx_rate_unavailable",
               "service_unavailable",
