@@ -8,7 +8,7 @@ repayment.**
 Never oversubscribed under concurrency, safe to retry, and a late treasury snapshot can't roll it back or
 erase what it reserved.
 
-![Node 22](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
+![Node 26](https://img.shields.io/badge/node-26-339933?logo=node.js&logoColor=white)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![NestJS 12](https://img.shields.io/badge/NestJS-12-E0234E?logo=nestjs&logoColor=white)
 ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
@@ -62,7 +62,8 @@ are integer minor units, as strings. Releasing it gives back exactly `1136364`, 
 
 ## Quick start
 
-**You need:** Docker. (Node 22 and pnpm 10 only to run the tests or the scripts on the host.)
+**You need:** Docker. (Node 26 and pnpm 10 only to run the tests or the scripts on the host. Node 26 ships
+without corepack: `npm install --global corepack && corepack enable` once, and pnpm follows `packageManager`.)
 
 ```sh
 docker compose up --build
@@ -422,7 +423,7 @@ condition in the code turns 5 tests red.
 
 |               |                                                                                                                                                                     |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Runtime**   | [Node.js 22](https://nodejs.org/docs/latest-v22.x/api/), [NestJS 12](https://docs.nestjs.com/) on Express 5, ES modules                                             |
+| **Runtime**   | [Node.js 26](https://nodejs.org/docs/latest-v26.x/api/), [NestJS 12](https://docs.nestjs.com/) on Express 5, ES modules                                             |
 | **Data**      | [PostgreSQL 17](https://www.postgresql.org/docs/17/) via [`pg`](https://node-postgres.com/), SQL migration files                                                    |
 | **Messaging** | [Redpanda](https://docs.redpanda.com/) (Kafka API) via [kafkajs](https://kafka.js.org/)                                                                             |
 | **API docs**  | [`@nestjs/swagger`](https://docs.nestjs.com/openapi/introduction), [Swagger UI](https://swagger.io/tools/swagger-ui/), [Redocly CLI](https://redocly.com/docs/cli/) |
@@ -476,7 +477,7 @@ Portless is a dev dependency that gives the host-run service a stable HTTPS name
 - `--lan` serves the name over mDNS, so it is reachable from other devices on the same Wi-Fi.
 - If a crashed process still holds the name, add `--force` to the `portless run` call in `package.json`.
 - To skip Portless for one run: `PORTLESS=0 pnpm start:dev`. The service is then at `http://localhost:3000`.
-- Pinned to 0.13.0: later releases require Node 24, and this project runs on Node 22.
+- Pinned exactly (0.15.12): portless is pre-1.0 and its state format can change between releases.
 
 </details>
 

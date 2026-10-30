@@ -127,7 +127,8 @@ cannot drift from code. Pattern taken from the ingrid repo, adapted. (`api-docs`
 
 ## Stack
 
-- **Node 22, TypeScript strict, NestJS, PostgreSQL, Kafka.** pnpm 10 (pinned in `packageManager`).
+- **Node 26 (from 22, 2026-10-30), TypeScript strict, NestJS, PostgreSQL, Kafka.** pnpm 10 (pinned in
+  `packageManager`).
 - **As built (2026-10-28):** NestJS 12 (ESM-only, so `"type": "module"`), TypeScript 6.0, Vitest 4 (Nest 12's
   ESM default), `pg` + SQL migrations, kafkajs 2.2.4, Redpanda v26.1, Postgres 17. Rationale:
   `docs/decisions/stack-2026-10-28.md`.
