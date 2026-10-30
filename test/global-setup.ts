@@ -3,7 +3,7 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { TestProject } from 'vitest/node';
 
-export const POSTGRES_IMAGE = 'postgres:17.10-alpine';
+export const POSTGRES_IMAGE = 'postgres:18.4-alpine';
 
 declare module 'vitest' {
   export interface ProvidedContext {
