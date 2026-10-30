@@ -23,6 +23,11 @@ export const ERROR_TABLE = {
     message: 'Idempotency-Key was already used with a different request.',
     outcome: 'conflict',
   },
+  invoice_already_reserved: {
+    status: 409,
+    message: 'This invoice already has an active reservation on this program.',
+    outcome: 'conflict',
+  },
   insufficient_capacity: {
     status: 422,
     message: 'Insufficient capacity on this program.',

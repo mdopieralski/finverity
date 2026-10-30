@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { PG_POOL, type Db, type Tx } from '../db/database.js';
 import { FX_RATE_PROVIDER, type FxQuote, type FxRateProvider } from '../fx/fx-rate.provider.js';
 import { type CurrencyCode, exponentOf } from '../money/currencies.js';
-import { convertMinor, parseRate } from '../money/money.js';
+import { BIGINT_MAX, convertMinor, parseRate } from '../money/money.js';
 import * as repo from './capacity.repository.js';
 import type { Availability, Reservation, ReleaseResult, ReserveResult } from './capacity.types.js';
 
@@ -28,8 +28,6 @@ export interface Priced {
 
 export type PriceResult =
   { ok: true; priced: Priced } | { ok: false; kind: 'program_not_found' | 'fx_rate_unavailable' };
-
-const BIGINT_MAX = 9_223_372_036_854_775_807n;
 
 @Injectable()
 export class CapacityService {
@@ -82,8 +80,9 @@ export class CapacityService {
     if (p.amountMinor > BIGINT_MAX) {
       return { ok: false, kind: 'insufficient_capacity' }; // larger than any limit can be
     }
-    const reservation = await repo.reserveCapacity(tx, {
+    return repo.reserveCapacity(tx, {
       programId: p.programId,
+      currency: p.programCurrency,
       invoiceRef: p.invoiceRef,
       invoiceAmountMinor: p.invoiceAmountMinor,
       invoiceCurrency: p.currency,
@@ -93,7 +92,6 @@ export class CapacityService {
       fxSource: p.quote.source,
       source,
     });
-    return reservation ? { ok: true, reservation } : { ok: false, kind: 'insufficient_capacity' };
   }
 
   /** Gives back exactly the stored amount. The FX provider is never called here. */

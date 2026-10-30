@@ -33,7 +33,8 @@ export interface Availability {
 }
 
 export type ReserveResult =
-  { ok: true; reservation: Reservation } | { ok: false; kind: 'insufficient_capacity' };
+  | { ok: true; reservation: Reservation }
+  | { ok: false; kind: 'insufficient_capacity' | 'invoice_already_reserved' };
 
 export type ReleaseResult =
   | { ok: true; reservation: Reservation; alreadyReleased: boolean }

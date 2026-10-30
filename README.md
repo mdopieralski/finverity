@@ -98,6 +98,9 @@ curl -s localhost:3000/programs/prg_eur_acme/availability "${H[@]}"
 # Reserve a USD invoice on the EUR program (the response above), then retry it: same answer, nothing reserved twice
 curl -s localhost:3000/programs/prg_eur_acme/reservations "${H[@]}" -H 'Idempotency-Key: approval-INV-1001' \
   -d '{"invoiceRef":"INV-1001","amountMinor":"1250000","currency":"USD"}' -D - -o /dev/null | grep -i replayed
+# (nothing: the first call reserves, so there is no replay header yet)
+curl -s localhost:3000/programs/prg_eur_acme/reservations "${H[@]}" -H 'Idempotency-Key: approval-INV-1001' \
+  -d '{"invoiceRef":"INV-1001","amountMinor":"1250000","currency":"USD"}' -D - -o /dev/null | grep -i replayed  # again
 # Idempotent-Replayed: true     (status 201, identical body)
 
 # Same key, different body
@@ -188,12 +191,16 @@ and returned in `fx`. A release gives back exactly `amountMinor`, never reconver
 `POST /programs/:id/reservations` with `{"invoiceRef", "amountMinor", "currency"}` and an `Idempotency-Key`
 header (1–255 printable ASCII characters, scoped to the token's `sub`):
 
-| Same key + …                   | Result                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------- |
-| same body                      | the original status and body, header `Idempotent-Replayed: true`, nothing written         |
-| different body                 | 409 `idempotency_key_reused`                                                              |
-| first try 422                  | 422 again: a key names one approval attempt and its answer is final; retry with a new key |
-| first try 404 / FX unavailable | not stored (nothing was reserved); a retry may succeed                                    |
+| Same key + …                   | Result                                                                            |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| same body                      | the original status and body, header `Idempotent-Replayed: true`, nothing written |
+| different body                 | 409 `idempotency_key_reused`                                                      |
+| first try 422 or 409 (invoice) | the same again: a key names one approval attempt and its answer is final          |
+| first try 404 / FX unavailable | not stored (nothing was reserved); a retry may succeed                            |
+
+One invoice has at most one `ACTIVE` reservation per program, whatever the key: a second one is 409
+`invoice_already_reserved`. That closes the gap a key cannot, an approval retried with a fresh key. Once
+released, the invoice can be reserved again.
 
 `POST /reservations/:id/release` is idempotent by state: a second release returns the same released
 reservation, 200.
@@ -207,9 +214,9 @@ to the log only.
 | Status | Code                                                            | When                                                                       |
 | ------ | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | 400    | `invalid_request`, `invalid_amount`, `idempotency_key_required` | malformed JSON, unknown fields or query parameters, bad ids, future `asOf` |
-| 401    | `unauthenticated`                                               | missing, forged, expired or `sub`-less token                               |
+| 401    | `unauthenticated`                                               | missing, forged, expired, `exp`-less or `sub`-less token                   |
 | 404    | `program_not_found`, `reservation_not_found`, `route_not_found` |                                                                            |
-| 409    | `idempotency_key_reused`                                        | same key, different body                                                   |
+| 409    | `idempotency_key_reused`, `invoice_already_reserved`            | same key, different body; the invoice already has an active reservation    |
 | 422    | `insufficient_capacity`, `fx_rate_unavailable`                  | a valid request the program cannot take                                    |
 | 503    | `service_unavailable`                                           | the database is unreachable                                                |
 | 500    | `internal`                                                      | anything else (logged with detail)                                         |
@@ -244,7 +251,7 @@ sequenceDiagram
   rect rgb(240, 255, 240)
   note over K,DB: one transaction
   K->>DB: INSERT processed_messages (duplicate → stop)
-  K->>DB: SELECT program FOR UPDATE; sequence > applied? else stale
+  K->>DB: SELECT program FOR UPDATE; snapshot: seq > applied, adjustment: seq = applied + 1
   K->>DB: ledger TREASURY_* delta rows + programs cache
   end
   K->>T: commit offset (only now)
@@ -334,10 +341,20 @@ The four graded invariants first; each names the test that proves it.
   never needs credentials outside `/docs/`) and four named files from `swagger-ui-dist`. Anything else under
   `/docs/` is a 404, including the package's `package.json`, `README.md` and source maps, which Nest's
   `SwaggerModule.setup` would serve. Same pattern as the ingrid service.
+- **`asOf` answers never change once given.** Every ledger row is stamped while its writer holds the program
+  row lock (a reservation's rows with its `createdAt` / `releasedAt`), and an `asOf` read takes `FOR SHARE` on
+  that row first, so it waits for a write in flight instead of answering without it. _Proof:_
+  `an asOf answer never changes later: it waits for a write in flight on the program`.
+- **Adjustments need the next sequence number; snapshots need any newer one.** A snapshot is full state, so
+  skipping ahead is safe. An adjustment is a delta: applied over a missing one, the treasury figures would be
+  wrong with no sign of it. A gap is `rejected` (detail `sequence gap: expected N, got M`) and the program
+  keeps its last consistent state until a snapshot rebases it.
 - **A limit cut below utilisation is applied.** Treasury owns the limit: availability goes negative (outcome
   `overcommitted`), new reservations are rejected, existing ones are untouched.
 - **Malformed treasury messages are recorded as `rejected` and acknowledged**, so one poison message cannot
-  block its partition; a database outage is not recorded and not acknowledged, so the message is retried.
+  block its partition; a database outage is not recorded and not acknowledged, so the message is retried. An
+  adjustment that would take a figure outside the supported range (half of BIGINT, so availability arithmetic
+  cannot overflow either) is rejected the same way, before it reaches the database.
 - **Logs:** one JSON line per request (`requestId`, `method`, `route`, `status`, `durationMs`, `outcome`,
   `programId`, `sub`) and one per treasury message (`messageId`, `type`, `sequence`, `outcome`). Never tokens
   or request bodies. `outcome` is one word: `reserved`, `replayed`, `released`, `read`, `rejected`, `invalid`,
@@ -353,15 +370,16 @@ The four graded invariants first; each names the test that proves it.
 - **A snapshot's `treasuryUtilisedMinor` excludes reservations made through this service**: they are
   re-applied on top. A real integration would agree this with treasury; if treasury included them, they would
   be counted twice.
-- **Adjustments and snapshots share one per-program sequence** (treasury's version counter). An adjustment
-  that arrives after a higher-numbered snapshot is stale.
+- **Adjustments and snapshots share one per-program sequence, and it is dense** (treasury's version counter,
+  +1 per change). That is what lets a gap be detected. If treasury's sequence had holes by design, adjustments
+  would need their own counter. An adjustment that arrives after a higher-numbered snapshot is stale.
 - **FX:** a fixed local table (`FX_RATES`, or the built-in indicative rates), not market data. _Production
   would use a rate service with a defined fixing policy; fixing policy is a business decision, not an
   engineering one._ Rounding up when converting is a business assumption too (the reservation always covers
   the invoice).
 - **`asOf` before a program existed returns zeros**, not 404: the program had no capacity then.
-- **JWT:** HS256 with a shared `JWT_SECRET`, `sub` required, optional `iss`/`aud`. No roles or tenants. The
-  local secret is a documented dev value.
+- **JWT:** HS256 with a shared `JWT_SECRET`, `sub` and `exp` required, optional `iss`/`aud`. No roles or
+  tenants. The local secret is a documented dev value.
 - **NestJS 12, ESM, Vitest:** Nest 12 is ESM-only and its ESM template uses Vitest, so that is the framework's
   default runner here. Validation is hand-written instead of class-validator, and `pg` with SQL files instead
   of an ORM, to stay within the brief's dependency list. Details:
@@ -380,17 +398,17 @@ pnpm test            # unit (money conversion), no Docker, < 1 s
 pnpm run test:e2e    # the graded specs: real HTTP, Postgres + Redpanda via Testcontainers, ≈ 25 s
 ```
 
-| File                           | Proves                                                                                                                                                                                                                                 |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `capacity.concurrency.spec.ts` | **N concurrent reservations vs a limit for N-1 → exactly one rejected, sum ≤ limit**; one minor unit over writes nothing; mixed concurrent reserve/release; control: a read-then-write guard oversubscribes                            |
-| `idempotency.spec.ts`          | **same key → original result**; different body → 409; parallel same key → one reservation; replayed 422; keys per subject; double release; **the same Kafka message is applied once** (real broker); failed handling commits no offset |
-| `reconciliation.spec.ts`       | **an older snapshot does not roll the state back**; **a snapshot does not wipe local active reservations**; limit cut → negative availability; adjustment ordering; poison messages                                                    |
-| `currency.spec.ts`             | **rate A → reserve, rate B → release: availability back to exactly the start**; stored rate and timestamp; JPY; rounding up; missing rate                                                                                              |
-| `auth.spec.ts`                 | every operation in the spec × {no token, other key, expired, no `sub`, `alg=none`, garbage} → 401; docs paths in every spelling → 401                                                                                                  |
-| `validation.spec.ts`           | each bad input → 400 and nothing written; ids, queries, 404s; DB down → 503 with no internal detail                                                                                                                                    |
-| `availability.ledger.spec.ts`  | availability recomputed from ledger rows inserted directly; `asOf`; cache == ledger fold; DB refuses ledger mutation; pagination incl. same-millisecond ties                                                                           |
-| `docs.contract.spec.ts`        | served spec == exported spec, version == package.json; Swagger assets load, nothing else under `/docs/`; error examples == error table; real responses validate                                                                        |
-| `src/money/money.spec.ts`      | parsing and `bigint` conversion: exponents, rounding, 12-decimal rates, BIGINT range                                                                                                                                                   |
+| File                           | Proves                                                                                                                                                                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `capacity.concurrency.spec.ts` | **N concurrent reservations vs a limit for N-1 → exactly one rejected, sum ≤ limit**; one minor unit over writes nothing; mixed concurrent reserve/release; control: a read-then-write guard oversubscribes                                                                                            |
+| `idempotency.spec.ts`          | **same key → original result**; different body → 409; parallel same key → one reservation; replayed 422; one active reservation per invoice (8 parallel keys → one 201); keys per subject; double release; **the same Kafka message is applied once** (real broker); failed handling commits no offset |
+| `reconciliation.spec.ts`       | **an older snapshot does not roll the state back**; **a snapshot does not wipe local active reservations**; limit cut → negative availability; adjustment ordering and sequence gaps; out-of-range adjustments; poison messages                                                                        |
+| `currency.spec.ts`             | **rate A → reserve, rate B → release: availability back to exactly the start**; stored rate and timestamp; JPY; rounding up; missing rate                                                                                                                                                              |
+| `auth.spec.ts`                 | every operation in the spec × {no token, other key, expired, no `exp`, no `sub`, `alg=none`, garbage} → 401; docs paths in every spelling → 401                                                                                                                                                        |
+| `validation.spec.ts`           | each bad input → 400 and nothing written; ids, queries, 404s; DB down → 503 with no internal detail                                                                                                                                                                                                    |
+| `availability.ledger.spec.ts`  | availability recomputed from ledger rows inserted directly; `asOf`; an `asOf` answer waits for a write in flight; cache == ledger fold; DB refuses UPDATE, DELETE and TRUNCATE; pagination incl. same-millisecond ties                                                                                 |
+| `docs.contract.spec.ts`        | served spec == exported spec, version == package.json; Swagger assets load, nothing else under `/docs/`; error examples == error table; real responses validate                                                                                                                                        |
+| `src/money/money.spec.ts`      | parsing and `bigint` conversion: exponents, rounding, 12-decimal rates, BIGINT range                                                                                                                                                                                                                   |
 
 The concurrency test fires all 25 requests together through a 40-connection pool, so they genuinely overlap:
 the control test proves the load interleaves by breaking a naive guard under it, and removing the guard's

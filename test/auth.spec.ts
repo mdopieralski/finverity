@@ -30,7 +30,8 @@ const badTokens = (): [string, string | null][] => [
     'an expired token',
     new JwtService({ secret: JWT_SECRET }).sign({ sub: 'x', exp: Math.floor(Date.now() / 1000) - 60 }),
   ],
-  ['a token without sub', new JwtService({ secret: JWT_SECRET }).sign({ role: 'x' })],
+  ['a token without sub', new JwtService({ secret: JWT_SECRET }).sign({ role: 'x' }, { expiresIn: 3600 })],
+  ['a token without exp (never expires)', new JwtService({ secret: JWT_SECRET }).sign({ sub: 'x' })],
   ['an alg=none token', 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ4In0.'],
   ['garbage', 'not-a-jwt'],
 ];
