@@ -38,7 +38,7 @@ consumer to `messaging-engineer`, app code to its owners, CI to `harness-enginee
 
 ## How you work
 
-1. **Pin versions:** Postgres major, Redpanda version, Node 22 base image, `packageManager`. Read each image's
+1. **Pin versions:** Postgres major, Redpanda version, Node 26 base image, `packageManager`. Read each image's
    current docs for env vars and healthchecks before writing them.
 2. **Health-gated start:** `depends_on: condition: service_healthy` on Postgres and Redpanda; the API runs
    migrations, then the seed, then listens. No open HTTP route is needed for health (every route needs a JWT).

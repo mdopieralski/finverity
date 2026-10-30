@@ -28,7 +28,7 @@ repayment.**
 
 One line on what it guarantees: never oversubscribed, safe to retry, treasury snapshots can't roll it back.
 
-[![CI](…/actions/workflows/ci.yml/badge.svg)](…) ![Node 22] ![TypeScript strict] ![NestJS 11] ![PostgreSQL 18]
+[![CI](…/actions/workflows/ci.yml/badge.svg)](…) ![Node 26] ![TypeScript strict] ![NestJS 11] ![PostgreSQL 18]
 ![OpenAPI 3.x]
 
 [Quick start](#quick-start) · [API](#api) · [How it works](#how-it-works) ·
@@ -69,7 +69,7 @@ trade-offs" and "Limitations and next steps" (the audit checks relative order on
 
 ## What each section holds
 
-**Quick start**: "You need: Docker" (and optionally Node 22 + pnpm). `docker compose up --build`. A "What /
+**Quick start**: "You need: Docker" (and optionally Node 26 + pnpm). `docker compose up --build`. A "What /
 Where" table: API `http://localhost:3000`, Swagger UI `/docs`, OpenAPI `/openapi.json`, Redpanda Console if
 any. How to get a token (host and in-container). A **Try it** block: commented curls each followed by `#
 <status>

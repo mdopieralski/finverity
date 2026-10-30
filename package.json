@@ -30,7 +30,7 @@
     "audit:submission": "node tools/invariants-audit.mjs --strict"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": ">=26"
   },
   "packageManager": "pnpm@10.22.0",
   "dependencies": {
@@ -51,12 +51,12 @@
     "@testcontainers/postgresql": "^12.2.1",
     "@testcontainers/redpanda": "^12.2.1",
     "@types/express": "^5.0.6",
-    "@types/node": "^22.20.5",
+    "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "ajv": "^8.20.0",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
-    "portless": "0.13.0",
+    "portless": "0.15.12",
     "prettier": "^3.9.10",
     "testcontainers": "^12.2.1",
     "typescript": "~6.0.3",
