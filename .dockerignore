@@ -1,0 +1,13 @@
+node_modules
+dist
+coverage
+.git
+.claude
+.github
+docs
+tools
+test
+*.log
+junit*.xml
+.env
+.env.*

@@ -1,0 +1,75 @@
+# One command: `docker compose up --build`. Postgres + Redpanda (Kafka API) + the service, seeded with
+# three demo programs (EUR, USD, JPY). Every value here is a local default, never a real secret.
+name: program-capacity
+
+services:
+  postgres:
+    image: postgres:17.10-alpine
+    environment:
+      POSTGRES_USER: capacity
+      POSTGRES_PASSWORD: capacity
+      POSTGRES_DB: capacity
+    ports:
+      - '55432:5432' # host port 55432: avoids clashing with a locally installed Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U capacity -d capacity']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Redpanda instead of Kafka + ZooKeeper/KRaft: Kafka-protocol compatible, one container, starts in seconds.
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.19
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    ports:
+      - '19092:19092'
+    healthcheck:
+      test: ['CMD-SHELL', "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    environment:
+      PORT: '3000'
+      DATABASE_URL: postgres://capacity:capacity@postgres:5432/capacity
+      DB_POOL_SIZE: '20'
+      JWT_SECRET: dev-only-change-me-0123456789
+      KAFKA_ENABLED: 'true'
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_TOPIC: treasury.capacity.v1
+      KAFKA_GROUP_ID: program-capacity
+      API_DOCS: '1'
+      SEED_DEMO_DATA: 'true'
+    ports:
+      - '3000:3000'
+    # Every HTTP route needs a JWT, so health is a TCP check on the port.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
