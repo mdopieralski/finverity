@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Build: install with the lockfile, compile TypeScript, keep production dependencies only.
-FROM node:26.12.1-alpine AS build
+FROM node:26.13.0-alpine AS build
 WORKDIR /app
 # Node 25+ no longer ships corepack: install it, then pnpm comes from package.json's packageManager.
 RUN npm install --global corepack@0.36.0 && corepack enable
@@ -12,7 +12,7 @@ COPY scripts ./scripts
 RUN pnpm run build && pnpm prune --prod --ignore-scripts
 
 # Run: small, non-root. Migrations run on start-up (src/main.ts), before the port opens.
-FROM node:26.12.1-alpine
+FROM node:26.13.0-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
